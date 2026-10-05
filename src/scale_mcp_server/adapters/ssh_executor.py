@@ -33,7 +33,8 @@ class SSHCommandExecutor(CommandExecutorInterface):
         password: Optional[str] = None,
         key_filename: Optional[str] = None,
         port: int = 22,
-        command_timeout: int = 30
+        command_timeout: int = 30,
+        known_hosts_file: Optional[str] = None,
     ):
         """Initialize the SSH command executor.
         
@@ -44,6 +45,10 @@ class SSHCommandExecutor(CommandExecutorInterface):
             key_filename: Path to SSH private key file (optional)
             port: SSH port (default: 22)
             command_timeout: Maximum execution time in seconds (default: 30)
+            known_hosts_file: Path to a known_hosts file to load in addition to
+                the system default (~/.ssh/known_hosts). If None, only the
+                system known_hosts file is used. Hosts absent from all loaded
+                known_hosts files will cause a connection error (RejectPolicy).
             
         Raises:
             CommandError: If configuration is invalid
@@ -63,6 +68,7 @@ class SSHCommandExecutor(CommandExecutorInterface):
         self.key_filename = key_filename
         self.port = port
         self.command_timeout = command_timeout
+        self.known_hosts_file = known_hosts_file
         self.ssh_client: Optional[Any] = None
         
         logger.info(
@@ -82,7 +88,18 @@ class SSHCommandExecutor(CommandExecutorInterface):
         
         try:
             self.ssh_client = paramiko.SSHClient()  # type: ignore
-            self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # type: ignore
+            # Load the system-wide known_hosts file (typically ~/.ssh/known_hosts).
+            # This gives paramiko a list of host keys it is allowed to trust.
+            self.ssh_client.load_system_host_keys()  # type: ignore
+            # If the caller supplied an extra known_hosts file (e.g. a
+            # cluster-specific file from the config), load that too.
+            if self.known_hosts_file:
+                self.ssh_client.load_host_keys(self.known_hosts_file)  # type: ignore
+            # RejectPolicy means: if the server's host key is NOT in any of the
+            # loaded known_hosts files, refuse the connection entirely.
+            # This prevents man-in-the-middle attacks where an attacker
+            # intercepts the connection and presents a fake host key.
+            self.ssh_client.set_missing_host_key_policy(paramiko.RejectPolicy())  # type: ignore
             
             connect_kwargs = {
                 'hostname': self.host,

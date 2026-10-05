@@ -35,10 +35,16 @@ SSH_PORT = int(ssh_config.get('port', 22))
 SSH_USERNAME = ssh_config['username']
 SSH_PASSWORD = ssh_config.get('password') or None
 SSH_KEY_PATH = ssh_config.get('key_path') or None
+# Optional path to a known_hosts file for SSH host key verification.
+# If not set, only the system default (~/.ssh/known_hosts) is used.
+SSH_KNOWN_HOSTS = ssh_config.get('known_hosts_file') or None
 
 # Expand ~ to home directory if present in key path
 if SSH_KEY_PATH:
     SSH_KEY_PATH = os.path.expanduser(SSH_KEY_PATH)
+# Expand ~ to home directory if present in known_hosts path
+if SSH_KNOWN_HOSTS:
+    SSH_KNOWN_HOSTS = os.path.expanduser(SSH_KNOWN_HOSTS)
 
 # Get timeout from config, default to 5.0 seconds (same as HTTP API)
 COMMAND_TIMEOUT = int(float(config.get('scale_api', {}).get('timeout', 5.0)))
@@ -65,7 +71,8 @@ def apply_policy(filesystem: str) -> str:
             password=SSH_PASSWORD if not SSH_KEY_PATH else None,
             key_filename=SSH_KEY_PATH,
             port=SSH_PORT,
-            command_timeout=COMMAND_TIMEOUT
+            command_timeout=COMMAND_TIMEOUT,
+            known_hosts_file=SSH_KNOWN_HOSTS,
         )
         
         # Execute mmapplypolicy directly without extracting policy to file
